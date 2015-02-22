@@ -1,0 +1,98 @@
+---
+title: "Machine learning project"
+author: 
+date: "Sunday, February 22, 2015"
+output: html_document
+---
+
+### Background
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset).
+
+### Data set
+The training data for this project are available here:
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+
+The test data are available here:
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+
+The data for this project comes from this original source: http://groupware.les.inf.puc-rio.br/har. If you use the document you create for this class for any purpose please cite them as they have been very generous in allowing their data to be used for this kind of assignment.
+
+```{r, echo=FALSE}
+# Loading libraries 
+library(caret)
+library(randomForest)
+
+set.seed(131313)
+
+# Download the data sets
+trainingSet <- read.csv("http://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv")
+testSet <- read.csv("http://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv")
+```
+
+### Cleaning and pre-processing the data
+The data set consists of 160 variables. A majority of these contain no data. These are empty or contain NA values. When the empty values are removed 60 variables are remaining. Some of these, such as names and dates, are excluded. To train the model with these variables can easily lead to over-fitting.
+I also tried to use my preprocess function that is built into Caret-packages. Unfortunately, I got some strange results that I could not resolve. Therefore, I had to abandon this solution, but the model was shown to work just fine without this feature.
+
+```{r}
+# Remove empty values
+missingValues <- sapply(trainingSet, function (x) any(is.na(x) | x == ""))
+cleanedTrainingSet <- trainingSet[!missingValues]
+# Exclude irrelevant columns
+drops <- c("X","user_name","cvtd_timestamp", "new_window")
+cleanedTrainingSet <- cleanedTrainingSet[,!(names(cleanedTrainingSet) %in% drops)]
+```
+
+After this cleaning the following variables are remaining.
+```{r}
+# Split the data set into one training and one testing data set
+names(cleanedTrainingSet)
+```
+
+After cleaning and preprocessing the data set i split up into two data set for validation purpose. 60% to the training set and 40% to the test set. 
+```{r}
+# Split the data set into one training and one testing data set
+split <- createDataPartition(cleanedTrainingSet$classe, p=0.6, list=FALSE)
+dfTrain <- cleanedTrainingSet[split,]
+dfTest <-  cleanedTrainingSet[-split,]
+```
+
+### Training the model
+In this project, I have chosen to use the method random forest to predict the outcome. The function randomForest in the randomForest-package is preferable since it is much faster than the corresponding function in the caret-package. Previously I experimented with the rpart method but the accuracy was disappointing.
+```{r}
+fit <- randomForest(classe ~. ,dfTrain)
+fit
+```
+
+### Results
+The trained model is first used to predict the activity of the training set. As you can see the accuracy in this case is 100%
+```{r}
+predictions <- predict(fit, dfTrain)
+confusionMatrix(predictions, dfTrain$classe)
+```
+
+When the algorithm is used on the test set the accuracy is 99,9%
+```{r}
+predictions <- predict(fit, dfTest)
+confusionMatrix(predictions, dfTest$classe)
+```
+
+
+### Submitting to Coursera
+```{r}
+# Use the sam data cleaning on the test set
+dfCT <- testSet[!missingValues]
+dfCT <- dfCT[,!(names(dfCT) %in% drops)]
+dfCT <- dfCT[,1:55]
+
+answers <- as.character(predict(fit, dfCT))
+
+# Function to generate test documents
+pml_write_files = function(x){
+      n = length(x)
+      for(i in 1:n){
+            filename = paste0("problem_id_",i,".txt")
+            write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+      }
+}
+pml_write_files(answers)
+```
